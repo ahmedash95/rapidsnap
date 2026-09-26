@@ -164,6 +164,9 @@ pub fn to_global_hotkey(h: &Hotkey) -> anyhow::Result<HotKey> {
     Ok(HotKey::new(Some(m), code))
 }
 
+/// The @2x template (36×36 px, black + alpha). tray-icon always sizes the status-item image to
+/// 18 pt high, so 36 px maps 2:1 onto Retina pixels and stays crisp. `with_icon_as_template(true)`
+/// lets AppKit tint it for light/dark menu bars.
 fn load_tray_icon() -> anyhow::Result<tray_icon::Icon> {
     let path = rs_core::assets::asset_path("icons/tray-template@2x.png");
     let img = image::open(&path).map_err(|e| anyhow::anyhow!("{path:?}: {e}"))?.to_rgba8();

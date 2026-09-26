@@ -5,8 +5,8 @@
 //! assets/wallpapers/<name>.jpg      bundled wallpapers (BUNDLED_WALLPAPERS)
 //! assets/icons/AppIcon.icns         app icon (bundle)
 //! assets/icons/app-icon-<N>.png     app icon PNGs (16..1024)
-//! assets/icons/tray-template.png    22×22 monochrome tray template
-//! assets/icons/tray-template@2x.png 44×44
+//! assets/icons/tray-template.png    18×18 monochrome tray template (tray-icon draws it at 18 pt)
+//! assets/icons/tray-template@2x.png 36×36
 //! ```
 
 use std::path::{Path, PathBuf};

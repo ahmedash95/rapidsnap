@@ -205,7 +205,7 @@ automatically.
 | `crates/rs-editor` | GPUI editor window: toolbar, canvas (hit-testing, handles, snapping), side panel, inline text editing, copy/save/drag-out. |
 | `crates/rapidsnap` | The app binary: menu-bar icon, global hotkeys, capture overlay, HUD, welcome and preferences windows, self-test. |
 | `assets/` | Wallpapers, tray and app icons, logo concepts. |
-| `scripts/` | `bundle.sh` (build `dist/RapidSnap.app`), `gen_tray_icon.py` (tray icon generator). |
+| `scripts/` | `bundle.sh` (build `dist/RapidSnap.app`), `gen_tray_icon.py` (menu-bar template generator, no dependencies). |
 | `docs/design/sidebar-research.md` | Research notes behind the side-panel design. |
 
 ## Development
@@ -269,6 +269,27 @@ the lock file and any name the new folder already has, and deletes nothing. The 
 `RAPIDSNAP_DATA_DIR` is set.
 
 Quit RapidSnap v1 (and any other copy of v2) while you test, because they share the default hotkeys.
+
+### Icon
+
+The app icon is **Snap Mark · Graphite**: four crop brackets and a coral hand-drawn loop on a white body. It is drawn
+on Apple's macOS 1024 template (an 824 px continuous-corner body with the shadow in the margin), so it sits at the
+same size as other Dock icons. The source is `assets/logo-concepts/claude/snap-mark-white/v2/`, which has vector
+masters for default, dark and tinted, separate 16 and 32 px masters, and layers for Icon Composer. The generator is in
+`assets/logo-concepts/claude/_source/`.
+
+To regenerate:
+
+```sh
+# 1. SVG masters + PNGs: build the resvg renderer in _source/renderer, then run gen.py / gen_white.py
+#    and render each SVG (see assets/logo-concepts/claude/README.md).
+# 2. App icon PNGs: copy snap-mark-white/v2/icon-{16,32,64,128,256,512,1024}.png to assets/icons/app-icon-<N>.png
+#    (16 and 32 come from the micro/small masters).
+# 3. AppIcon.icns: put those PNGs in an AppIcon.iconset (icon_16x16 … icon_512x512@2x), then
+iconutil -c icns AppIcon.iconset -o assets/icons/AppIcon.icns
+# 4. Menu-bar template (18x18 / 36x36, black + alpha; tray-icon draws it at 18 pt):
+python3 scripts/gen_tray_icon.py
+```
 
 ## Known limitations
 
