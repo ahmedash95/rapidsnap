@@ -1,0 +1,166 @@
+# Release: build RapidSnap.app → DMG on every `vX.Y.Z` tag, publish it as a
+# GitHub release and bump the cask in ahmedash95/homebrew-tap.
+#
+#   git tag v2.0.1 && git push origin v2.0.1
+#
+# Quota notes (macOS minutes are the expensive ones):
+# * Only tags do the full bundle + release. Pushes to main run the build only
+#   when dependencies change, to warm the Rust cache: GitHub caches saved on a
+#   tag can't be restored by later tags, but main's cache can.
+# * The toolchain is pinned so the cache key stays stable (a floating `stable`
+#   would throw the cache away every six weeks). Bump RUST_TOOLCHAIN on purpose.
+# * arm64 only (the cask requires Apple Silicon), no tests/clippy here.
+# * Publishing runs on a cheap Linux runner, and the macOS build job gets a
+#   read-only token and no secrets (dependency build scripts run there).
+#
+# Tap bump needs the repo secret HOMEBREW_TAP_TOKEN: a fine-grained PAT with
+# "Contents: read and write" on ahmedash95/homebrew-tap only. Without it the
+# release is still published and the tap step is skipped.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+    branches: [main]
+    # Path filters only apply to branch pushes; tag pushes always run.
+    paths:
+      - Cargo.lock
+      - Cargo.toml
+      - "crates/*/Cargo.toml"
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  # Never cancel a release half-way; superseded cache warm-ups can go.
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  RUST_TOOLCHAIN: "1.98.1"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  build:
+    name: Build DMG
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read app version
+        id: version
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/rapidsnap/Cargo.toml | head -1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match crates/rapidsnap/Cargo.toml version $version"
+            exit 1
+          fi
+
+      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: macos-release
+          # Only main saves; tags restore main's cache (see header).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build
+        run: cargo build --release --locked -p rapidsnap
+
+      - name: Bundle and make DMG
+        if: github.ref_type == 'tag'
+        run: |
+          SKIP_BUILD=1 scripts/bundle.sh
+          # hdiutil on hosted runners is occasionally "Resource busy"; retry.
+          for attempt in 1 2 3; do
+            if scripts/make_dmg.sh; then ok=1; break; fi
+            echo "make_dmg.sh failed (attempt $attempt), retrying"; sleep 10
+          done
+          [[ -n "${ok:-}" ]]
+          cd dist
+          shasum -a 256 "RapidSnap-${{ steps.version.outputs.version }}.dmg" > "RapidSnap-${{ steps.version.outputs.version }}.dmg.sha256"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.ref_type == 'tag'
+        with:
+          name: dmg
+          path: |
+            dist/RapidSnap-*.dmg
+            dist/RapidSnap-*.dmg.sha256
+          compression-level: 0 # already compressed
+          retention-days: 3
+          if-no-files-found: error
+
+  publish:
+    name: Publish release and bump tap
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dmg
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          files=("RapidSnap-$VERSION.dmg" "RapidSnap-$VERSION.dmg.sha256")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber   # re-run
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --verify-tag \
+              --title "RapidSnap $VERSION" --generate-notes
+          fi
+
+      - name: Check tap token
+        id: tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -n "$TAP_TOKEN" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::HOMEBREW_TAP_TOKEN not set; update the cask in ahmedash95/homebrew-tap by hand"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.tap.outputs.enabled == 'true'
+        with:
+          repository: ahmedash95/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Bump cask
+        if: steps.tap.outputs.enabled == 'true'
+        working-directory: homebrew-tap
+        run: |
+          sha="$(cut -d' ' -f1 "../RapidSnap-$VERSION.dmg.sha256")"
+          sed -i -E \
+            -e "s/^  version \".*\"/  version \"$VERSION\"/" \
+            -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" \
+            Casks/rapidsnap.rb
+          if git diff --quiet; then echo "cask already at $VERSION"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "rapidsnap $VERSION"
+          git push
