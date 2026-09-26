@@ -1,0 +1,42 @@
+[package]
+name = "rapidsnap"
+description = "RapidSnap v2 app: menu-bar tray, global hotkeys, capture flow, editor windows."
+# App version (CFBundleShortVersionString, via scripts/bundle.sh). 2.x = successor
+# of RapidSnap v1 (last release 1.5.1, same bundle id).
+version = "2.0.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "rapidsnap"
+path = "src/main.rs"
+
+[dependencies]
+rs-core.workspace = true
+rs-render.workspace = true
+rs-capture.workspace = true
+rs-smart.workspace = true
+rs-editor.workspace = true
+gpui-kit.workspace = true
+gpui.workspace = true
+tray-icon.workspace = true
+global-hotkey.workspace = true
+image.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+smol.workspace = true
+raw-window-handle.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+# Only the headers used (workspace turns default features off; see root Cargo.toml).
+objc2-foundation = { workspace = true, features = ["NSGeometry", "NSString"] }
+objc2-app-kit = { workspace = true, features = ["objc2-core-foundation", "NSApplication", "NSColor", "NSGraphics", "NSResponder", "NSRunningApplication", "NSView", "NSWindow", "NSWorkspace"] }
+objc2-core-foundation = { workspace = true, features = ["CFArray", "CFCGTypes", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-graphics = { workspace = true, features = ["libc", "CGDirectDisplay", "CGError", "CGEvent", "CGEventTypes", "CGRemoteOperation", "CGWindow"] }
+dispatch2.workspace = true

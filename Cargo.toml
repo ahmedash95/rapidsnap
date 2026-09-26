@@ -1,0 +1,168 @@
+# RapidSnap v2 workspace.
+#
+# OWNERSHIP: owned by the integration agent (foundation before it). Crate
+# agents add dependencies to their own crate's Cargo.toml, preferring
+# `foo.workspace = true` for anything declared below. See CONTRACTS.md.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/rs-core",
+    "crates/rs-render",
+    "crates/rs-capture",
+    "crates/rs-smart",
+    "crates/rs-editor",
+    "crates/rapidsnap",
+]
+default-members = ["crates/rapidsnap"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+# ---- internal crates ----
+rs-core = { path = "crates/rs-core" }
+rs-render = { path = "crates/rs-render" }
+rs-capture = { path = "crates/rs-capture" }
+rs-smart = { path = "crates/rs-smart" }
+rs-editor = { path = "crates/rs-editor" }
+
+# ---- GPUI ----
+# gpui-component (a.k.a. gpui-kit) pinned to tag v0.6.6. That release is built
+# against the crates.io GPUI snapshot `gpui-pre =0.3.6` (Zed no longer needs a
+# git pin: gpui-component itself pins the exact snapshot). We pin the identical
+# snapshot here so `gpui` resolves to the very same crate instance.
+# `runtime_shaders` is enabled by gpui-kit's own gpui_platform dependency (no
+# `xcrun metal` needed); we repeat it below to make it explicit.
+gpui-kit = { git = "https://github.com/longbridge/gpui-component", rev = "9765ae2c9a5eccfa13891248a445991e6f6a09d8" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "9765ae2c9a5eccfa13891248a445991e6f6a09d8" }
+gpui = { package = "gpui-pre", version = "=0.3.6" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.6", features = ["font-kit", "runtime_shaders"] }
+
+# ---- data / util ----
+serde = { version = "1.0.219", features = ["derive", "rc"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+uuid = { version = "1.18", features = ["v4", "serde"] }
+log = "0.4"
+env_logger = "0.11"
+dirs = "7"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+base64 = "0.23"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+regex = "1"
+smol = "2"
+futures = "0.3"
+
+# ---- rendering / imaging ----
+tiny-skia = "0.12"
+cosmic-text = "0.19"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "webp", "bmp", "gif"] }
+imageproc = { version = "0.27", default-features = false }
+
+# ---- platform integration ----
+tray-icon = "0.25"
+global-hotkey = "0.8"
+arboard = { version = "3.6", features = ["image-data"] }
+xcap = "0.9"
+rfd = "0.17"
+raw-window-handle = "0.6"
+
+# ---- macOS / objc2 family ----
+objc2 = "0.6"
+block2 = "0.6"
+dispatch2 = "0.3"
+# Framework crates: default features OFF (the defaults enable every header
+# *and* every optional framework dependency — e.g. objc2-vision → CoreML,
+# AVFoundation; objc2-screen-capture-kit → AVFoundation, UTI — which adds
+# load commands for frameworks we never call). Each crate lists exactly the
+# headers it uses in its own Cargo.toml.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std"] }
+objc2-vision = { version = "0.3", default-features = false, features = ["std"] }
+objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std"] }
+objc2-image-io = { version = "0.3", default-features = false, features = ["std"] }
+
+# Not trimmed: gpui-base / gpui-component (objc2-app-kit defaults → CloudKit,
+# CoreData, CoreImage) and gpui (objc2-user-notifications defaults →
+# CoreLocation). Measured (QA 2026-09-25) with vendored [patch.crates-io]
+# copies that dropped them: 1102 dyld images at launch either way, same RSS /
+# footprint — AppKit and Vision load those frameworks transitively anyway — so
+# the patch was not kept.
+
+[profile.dev]
+codegen-units = 16
+debug = "limited"
+split-debuginfo = "unpacked"
+
+# GPUI and friends are very slow unoptimized; optimize deps even in dev.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Our hot pixel-pushing crates: optimize in dev too so the debug app is usable
+# (rendering / capture cropping at -O0 is 10-30x slower). `"*"` above only
+# matches non-workspace packages, hence the explicit entries.
+[profile.dev.package.rs-render]
+opt-level = 2
+
+[profile.dev.package.rs-capture]
+opt-level = 2
+
+# Release: small binary (PRODUCT: bundle < 20 MB) without giving up render
+# speed (4K export < 500 ms). Everything is size-optimized ("s") except the
+# pixel pipeline (renderer, codecs, rasterizer, capture), which stays at -O3.
+# panic = "abort" (-3.4 MB): nothing relies on catch_unwind (gpui-component
+# only uses it to clean up and resume_unwind), and on macOS every GPUI task and
+# AppKit callback runs behind an `extern "C"` trampoline, so a panic there
+# already aborts under "unwind" too. Only our own std threads (editor render
+# worker, font warm-up) lose panic isolation — non-test code has no
+# unwrap/expect/panic on user data (integration audit).
+# strip: rustc's own stripping shells out to rust-objcopy, which is broken in
+# this toolchain install (missing libLLVM.dylib) → `strip = "none"` here and
+# scripts/bundle.sh runs the system `strip -x` on the bundled binary.
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = "none"
+debug = false
+incremental = false
+panic = "abort"
+
+[profile.release.package.rs-render]
+opt-level = 3
+[profile.release.package.rs-capture]
+opt-level = 3
+[profile.release.package.tiny-skia]
+opt-level = 3
+[profile.release.package.tiny-skia-path]
+opt-level = 3
+[profile.release.package.image]
+opt-level = 3
+[profile.release.package.imageproc]
+opt-level = 3
+[profile.release.package.png]
+opt-level = 3
+[profile.release.package.fdeflate]
+opt-level = 3
+[profile.release.package.miniz_oxide]
+opt-level = 3
+[profile.release.package.zune-jpeg]
+opt-level = 3
+[profile.release.package.image-webp]
+opt-level = 3
+[profile.release.package.simd-adler32]
+opt-level = 3
+[profile.release.package.crc32fast]
+opt-level = 3
+[profile.release.package.zeno]
+opt-level = 3
+[profile.release.package.swash]
+opt-level = 3

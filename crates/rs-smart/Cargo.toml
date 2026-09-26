@@ -1,0 +1,32 @@
+[package]
+name = "rs-smart"
+description = "RapidSnap smart features & persistence: OCR, auto-redact, .rsnap project files, history, preferences, background library."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rs-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
+image.workspace = true
+zip.workspace = true
+uuid.workspace = true
+log.workspace = true
+regex.workspace = true
+chrono.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+block2.workspace = true
+# Only the headers used (workspace turns default features off; see root Cargo.toml).
+objc2-foundation = { workspace = true, features = ["NSArray", "NSBundle", "NSDictionary", "NSEnumerator", "NSError", "NSObjCRuntime", "NSRange", "NSString", "NSValue"] }
+objc2-core-foundation = { workspace = true, features = ["CFCGTypes", "CFData"] }
+objc2-core-graphics = { workspace = true, features = ["CGColorSpace", "CGDataProvider", "CGImage"] }
+objc2-vision = { workspace = true, features = ["objc2-core-foundation", "objc2-core-graphics", "VNObservation", "VNRecognizeTextRequest", "VNRequest", "VNRequestHandler", "VNTypes"] }
+
+[dev-dependencies]
+cosmic-text.workspace = true

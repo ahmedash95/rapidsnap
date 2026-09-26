@@ -1,0 +1,37 @@
+[package]
+name = "rs-editor"
+description = "RapidSnap GPUI editor window (toolbar, canvas, style panel)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rs-core.workspace = true
+rs-render.workspace = true
+gpui-kit.workspace = true
+gpui.workspace = true
+image.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+log.workspace = true
+smol.workspace = true
+uuid.workspace = true
+unicode-segmentation = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+raw-window-handle.workspace = true
+objc2.workspace = true
+# Only the headers used (workspace turns default features off; see root Cargo.toml).
+objc2-foundation = { workspace = true, features = ["NSArray", "NSDictionary", "NSGeometry", "NSObject", "NSString", "NSURL"] }
+objc2-app-kit = { workspace = true, features = ["objc2-core-foundation", "objc2-core-graphics", "NSApplication", "NSBitmapImageRep", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSGraphics", "NSImage", "NSImageRep", "NSPasteboard", "NSResponder", "NSView"] }
+objc2-core-graphics = { workspace = true, features = ["CGImage", "CGWindow"] }
+objc2-core-foundation = { workspace = true, features = ["CFCGTypes"] }
+dispatch2.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+
+[[example]]
+name = "editor_demo"
+path = "examples/editor_demo.rs"

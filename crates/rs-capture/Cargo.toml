@@ -1,0 +1,30 @@
+[package]
+name = "rs-capture"
+description = "RapidSnap screen capture, clipboard and image import."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rs-core.workspace = true
+image.workspace = true
+thiserror.workspace = true
+log.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+block2.workspace = true
+dispatch2.workspace = true
+# Only the headers used (workspace turns default features off; see root Cargo.toml).
+objc2-foundation = { workspace = true, features = ["NSArray", "NSData", "NSDictionary", "NSEnumerator", "NSError", "NSObjCRuntime", "NSString", "NSURL", "NSValue"] }
+objc2-app-kit = { workspace = true, features = ["objc2-core-foundation", "NSBitmapImageRep", "NSGraphics", "NSImageRep", "NSPasteboard", "NSPasteboardItem", "NSScreen", "NSWorkspace"] }
+objc2-core-foundation = { workspace = true, features = ["CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-graphics = { workspace = true, features = ["libc", "CGBitmapContext", "CGColorSpace", "CGContext", "CGDataProvider", "CGDirectDisplay", "CGDisplayConfiguration", "CGError", "CGImage", "CGWindow"] }
+objc2-screen-capture-kit = { workspace = true, features = ["block2", "libc", "objc2-core-foundation", "objc2-core-graphics", "SCScreenshotManager", "SCShareableContent", "SCStream", "SCError"] }
+# HEIC etc. decode.
+objc2-image-io = { workspace = true, features = ["objc2-core-graphics", "CGImageProperties", "CGImageSource"] }
+
+# Clipboard on non-macOS only (macOS uses NSPasteboard directly).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+arboard.workspace = true
